@@ -1,0 +1,69 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+*.whl
+*.so
+
+# --- Entornos virtuales ---
+.venv/
+venv/
+env/
+.env
+.env.*
+!.env.example
+
+# --- Datos (nunca versionar datos crudos ni procesados) ---
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# --- Modelos entrenados ---
+models/*.pkl
+models/*.joblib
+models/*.h5
+models/*.pt
+models/*.onnx
+models/metrics.json
+
+# --- Notebooks: outputs y checkpoints ---
+notebooks/.ipynb_checkpoints/
+*.ipynb
+
+# --- IDEs ---
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# --- Herramientas de calidad ---
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# --- AWS / credenciales ---
+.aws/
+*.pem
+*.key
+credentials
+
+# --- Logs ---
+*.log
+logs/
+
+# --- macOS ---
+.DS_Store
+
+# --- Windows ---
+Thumbs.db
+desktop.ini

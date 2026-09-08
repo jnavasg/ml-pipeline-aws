@@ -1,0 +1,40 @@
+name: ML Pipeline CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Run tests with pytest
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # joblib no está en requirements.txt porque viene con scikit-learn,
+      # pero lo instalamos explícitamente para mayor claridad
+      - name: Install joblib (incluido en scikit-learn)
+        run: pip install joblib
+
+      - name: Run tests
+        run: pytest tests/ -v --tb=short
+
+      # Paso opcional: subir reporte de cobertura
+      # - name: Upload coverage report
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: coverage-report
+      #     path: htmlcov/
