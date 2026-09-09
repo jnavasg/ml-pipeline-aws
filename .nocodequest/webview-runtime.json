@@ -1,0 +1,311 @@
+{
+  "buildStamp": "H-2026-06-19-rt7",
+  "seq": 9,
+  "bootstrap": {
+    "state": {
+      "player": {
+        "name": "Aventurero",
+        "level": 1,
+        "exp": 0,
+        "gold": 50,
+        "equipped": {
+          "skin": "mono_fabrica",
+          "weapon": "martillo_refactor"
+        }
+      },
+      "inventory": {
+        "weapons": [
+          "martillo_refactor"
+        ],
+        "skins": [
+          "mono_fabrica"
+        ],
+        "scrolls": {
+          "pergamino_estabilidad": 1
+        },
+        "potions": {
+          "pocion_cafe": 0
+        }
+      },
+      "badges": [],
+      "lair": {
+        "decorations": [
+          "planta_buen_codigo"
+        ],
+        "technical_debt_level": 0,
+        "lastPotionAt": null
+      },
+      "acceptedQuests": [],
+      "adventureLog": [],
+      "stats": {
+        "bugsDefeated": 0,
+        "commitsTotal": 0,
+        "questsCompleted": 0,
+        "bossesDefeated": 0,
+        "linesAnalyzed": 0
+      }
+    },
+    "quests": [],
+    "cards": [
+      {
+        "id": "commit-changes",
+        "title": "🔒 Sellar Partida con un Commit",
+        "description": "Hay 12 archivo(s) modificados sin sello reciente. Tal vez convenga fijar el progreso antes de seguir explorando.",
+        "action": "commit_changes",
+        "target": {
+          "file": null,
+          "line": null,
+          "function_name": null
+        },
+        "reward": "+50 EXP, +20 Oro",
+        "risk": "Podrías consagrar cambios aún inmaduros",
+        "priority": "high"
+      }
+    ],
+    "ideSummary": {
+      "generatedAt": "2026-09-09T17:07:46.464Z",
+      "workspaceName": "folder",
+      "activeFile": {
+        "name": "organizar_archivos.py",
+        "path": "c:\\Users\\samue\\folder\\organizar_archivos.py",
+        "language": "python",
+        "isDirty": false
+      },
+      "modifiedCount": 12,
+      "modifiedFiles": [
+        {
+          "name": "requirements.txt",
+          "status": "modified",
+          "path": "c:\\Users\\samue\\folder\\requirements.txt"
+        },
+        {
+          "name": "evaluate.py",
+          "status": "modified",
+          "path": "c:\\Users\\samue\\folder\\src\\evaluation\\evaluate.py"
+        },
+        {
+          "name": "ingestion.py",
+          "status": "modified",
+          "path": "c:\\Users\\samue\\folder\\src\\ingestion\\ingestion.py"
+        },
+        {
+          "name": "preprocessing.py",
+          "status": "modified",
+          "path": "c:\\Users\\samue\\folder\\src\\preprocessing\\preprocessing.py"
+        },
+        {
+          "name": "train.py",
+          "status": "modified",
+          "path": "c:\\Users\\samue\\folder\\src\\training\\train.py"
+        },
+        {
+          "name": "test_evaluation.py",
+          "status": "modified",
+          "path": "c:\\Users\\samue\\folder\\tests\\test_evaluation.py"
+        }
+      ],
+      "diagnostics": {
+        "errorCount": 0,
+        "warnCount": 2,
+        "topError": null
+      }
+    },
+    "sceneMood": {
+      "state": "warning",
+      "label": "Mazmorra inquieta",
+      "reason": "Avisos activos: 2",
+      "backdropKey": "bg_workshop",
+      "errorCount": 0,
+      "warnCount": 2,
+      "overlayAlpha": 0.22,
+      "overlayColor": 6048274
+    },
+    "visualSkins": {
+      "weapon": "martillo_refactor",
+      "skin": "mono_fabrica"
+    },
+    "speechText": "Jasper afina su laud mientras el reino despierta..."
+  },
+  "events": [
+    {
+      "id": 1,
+      "command": "syncInventory",
+      "state": {
+        "player": {
+          "name": "Aventurero",
+          "level": 1,
+          "exp": 0,
+          "gold": 50,
+          "equipped": {
+            "skin": "mono_fabrica",
+            "weapon": "martillo_refactor"
+          }
+        },
+        "inventory": {
+          "weapons": [
+            "martillo_refactor"
+          ],
+          "skins": [
+            "mono_fabrica"
+          ],
+          "scrolls": {
+            "pergamino_estabilidad": 1
+          },
+          "potions": {
+            "pocion_cafe": 0
+          }
+        },
+        "badges": [],
+        "lair": {
+          "decorations": [
+            "planta_buen_codigo"
+          ],
+          "technical_debt_level": 0,
+          "lastPotionAt": null
+        },
+        "acceptedQuests": [],
+        "adventureLog": [],
+        "stats": {
+          "bugsDefeated": 0,
+          "commitsTotal": 0,
+          "questsCompleted": 0,
+          "bossesDefeated": 0,
+          "linesAnalyzed": 0
+        }
+      },
+      "ts": 1788973666494
+    },
+    {
+      "id": 2,
+      "command": "updateVisualSkins",
+      "weapon": "martillo_refactor",
+      "skin": "mono_fabrica",
+      "ts": 1788973666548
+    },
+    {
+      "id": 3,
+      "command": "refreshQuestBoard",
+      "quests": [],
+      "ts": 1788973666566
+    },
+    {
+      "id": 4,
+      "command": "refreshQuestBoard",
+      "quests": [],
+      "ts": 1788973666584
+    },
+    {
+      "id": 5,
+      "command": "syncIdeSummary",
+      "summary": {
+        "generatedAt": "2026-09-09T17:07:46.464Z",
+        "workspaceName": "folder",
+        "activeFile": {
+          "name": "organizar_archivos.py",
+          "path": "c:\\Users\\samue\\folder\\organizar_archivos.py",
+          "language": "python",
+          "isDirty": false
+        },
+        "modifiedCount": 12,
+        "modifiedFiles": [
+          {
+            "name": "requirements.txt",
+            "status": "modified",
+            "path": "c:\\Users\\samue\\folder\\requirements.txt"
+          },
+          {
+            "name": "evaluate.py",
+            "status": "modified",
+            "path": "c:\\Users\\samue\\folder\\src\\evaluation\\evaluate.py"
+          },
+          {
+            "name": "ingestion.py",
+            "status": "modified",
+            "path": "c:\\Users\\samue\\folder\\src\\ingestion\\ingestion.py"
+          },
+          {
+            "name": "preprocessing.py",
+            "status": "modified",
+            "path": "c:\\Users\\samue\\folder\\src\\preprocessing\\preprocessing.py"
+          },
+          {
+            "name": "train.py",
+            "status": "modified",
+            "path": "c:\\Users\\samue\\folder\\src\\training\\train.py"
+          },
+          {
+            "name": "test_evaluation.py",
+            "status": "modified",
+            "path": "c:\\Users\\samue\\folder\\tests\\test_evaluation.py"
+          }
+        ],
+        "diagnostics": {
+          "errorCount": 0,
+          "warnCount": 2,
+          "topError": null
+        }
+      },
+      "ts": 1788973666607
+    },
+    {
+      "id": 6,
+      "command": "updateSceneMood",
+      "mood": {
+        "state": "warning",
+        "label": "Mazmorra inquieta",
+        "reason": "Avisos activos: 2",
+        "backdropKey": "bg_workshop",
+        "errorCount": 0,
+        "warnCount": 2,
+        "overlayAlpha": 0.22,
+        "overlayColor": 6048274
+      },
+      "ts": 1788973666625
+    },
+    {
+      "id": 7,
+      "command": "showAdventureCards",
+      "cards": [
+        {
+          "id": "commit-changes",
+          "title": "🔒 Sellar Partida con un Commit",
+          "description": "Hay 12 archivo(s) modificados sin sello reciente. Tal vez convenga fijar el progreso antes de seguir explorando.",
+          "action": "commit_changes",
+          "target": {
+            "file": null,
+            "line": null,
+            "function_name": null
+          },
+          "reward": "+50 EXP, +20 Oro",
+          "risk": "Podrías consagrar cambios aún inmaduros",
+          "priority": "high"
+        }
+      ],
+      "ts": 1788973666644
+    },
+    {
+      "id": 8,
+      "command": "showCommitModal",
+      "suggestedMessage": "sello real antes de nueva incursión",
+      "cardId": "commit-changes",
+      "changedFiles": [
+        "requirements.txt",
+        "evaluate.py",
+        "ingestion.py",
+        "preprocessing.py",
+        "train.py",
+        "test_evaluation.py"
+      ],
+      "changedFilesTotal": 12,
+      "commitScopeMessage": "Este sello aplicara 12 cambio(s) tracked del repositorio activo.",
+      "ts": 1788973718185
+    },
+    {
+      "id": 9,
+      "command": "commitModalState",
+      "state": "working",
+      "message": "Sellando...",
+      "ts": 1788973722977
+    }
+  ]
+}

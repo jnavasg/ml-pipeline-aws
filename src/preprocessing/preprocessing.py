@@ -1,14 +1,20 @@
 """
-Preprocessing stage — transforma los datos crudos en features listos para entrenar.
+Preprocessing stage — transforma el CSV crudo de Titanic en features listos para entrenar.
 
-Tareas típicas:
-  - Limpieza (nulos, duplicados, outliers)
-  - Encoding de variables categóricas
-  - Escalado / normalización
-  - Feature engineering
-  - Split train/validation/test
+Columnas de entrada (data/raw/titanic.csv):
+  survived, pclass, sex, age, sibsp, parch, fare, embarked,
+  class, who, adult_male, deck, embark_town, alive, alone
 
-Los datos procesados se guardan en data/processed/.
+Columnas eliminadas:
+  - class, embark_town : redundantes con pclass / embarked
+  - who, adult_male    : derivables de sex + age
+  - deck               : >75 % nulos
+  - alive              : fuga del target (es survived en texto)
+  - alone              : derivable de sibsp + parch
+
+Columnas de salida (data/processed/):
+  pclass, sex, age, sibsp, parch, fare, embarked_Q, embarked_S
+  → target: survived
 """
 
 import logging
@@ -16,98 +22,104 @@ import os
 
 import pandas as pd
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
 
 logger = logging.getLogger(__name__)
 
+RAW_PATH = "data/raw/titanic.csv"
+PROCESSED_DIR = "data/processed"
+TARGET_COL = "survived"
 
-def load_raw(input_path: str) -> pd.DataFrame:
-    """Carga los datos crudos desde data/raw/."""
-    return pd.read_parquet(input_path)
+_DROP_COLS = ["class", "who", "adult_male", "deck", "embark_town", "alive", "alone"]
 
 
-def clean(df: pd.DataFrame) -> pd.DataFrame:
+def load_raw(input_path: str = RAW_PATH) -> pd.DataFrame:
+    """Carga el CSV crudo producido por ingestion."""
+    return pd.read_csv(input_path)
+
+
+def clean_titanic(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Elimina filas con nulos y duplicados.
-
-    TODO:
-      - Definir estrategia por columna (imputar vs. eliminar).
-      - Tratar outliers con IQR o z-score según el dominio.
+    Limpieza específica para Titanic:
+      - Elimina columnas redundantes / con alta tasa de nulos.
+      - Imputa 'age' con la mediana del conjunto completo.
+      - Imputa los 2 nulos de 'embarked' con la moda.
+      - Elimina duplicados exactos.
     """
+    df = df.drop(columns=[c for c in _DROP_COLS if c in df.columns])
+    df = df.copy()
+    df["age"] = df["age"].fillna(df["age"].median())
+    df["embarked"] = df["embarked"].fillna(df["embarked"].mode()[0])
     df = df.drop_duplicates()
-    df = df.dropna()
-    logger.info("Tras limpieza: %s filas", len(df))
+    logger.info("Tras limpieza: %s filas, columnas: %s", len(df), list(df.columns))
     return df
 
 
-def encode_categoricals(df: pd.DataFrame, cat_cols: list[str]) -> pd.DataFrame:
+def encode_titanic(df: pd.DataFrame) -> pd.DataFrame:
     """
-    One-hot encoding de columnas categóricas.
+    Encoding para Titanic:
+      - 'sex'      → binario (0 = female, 1 = male).
+      - 'embarked' → one-hot eliminando la categoría de referencia 'C'.
+                     Genera: embarked_Q, embarked_S.
 
-    TODO:
-      - Evaluar OrdinalEncoder para variables con orden natural.
-      - Persistir el encoder para reproducirlo en inferencia.
+    No se aplica StandardScaler porque RandomForest no lo necesita.
+    Si cambias a regresión logística o SVM, añade el escalado aquí.
     """
-    df = pd.get_dummies(df, columns=cat_cols, drop_first=True)
-    return df
-
-
-def scale_features(
-    X_train: pd.DataFrame, X_val: pd.DataFrame, X_test: pd.DataFrame
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """
-    Escala features numéricas ajustando solo sobre train.
-
-    TODO: persistir el scaler (joblib) para usarlo en el endpoint de inferencia.
-    """
-    scaler = StandardScaler()
-    X_train_scaled = pd.DataFrame(
-        scaler.fit_transform(X_train), columns=X_train.columns
+    df = df.copy()
+    df["sex"] = (df["sex"] == "male").astype(int)
+    embarked_dummies = (
+        pd.get_dummies(df["embarked"], prefix="embarked", drop_first=True)
+        .astype(int)
     )
-    X_val_scaled = pd.DataFrame(scaler.transform(X_val), columns=X_val.columns)
-    X_test_scaled = pd.DataFrame(scaler.transform(X_test), columns=X_test.columns)
-    return X_train_scaled, X_val_scaled, X_test_scaled
+    df = pd.concat([df.drop(columns=["embarked"]), embarked_dummies], axis=1)
+    logger.info("Tras encoding: %s columnas", df.shape[1])
+    return df
 
 
 def split(
     df: pd.DataFrame,
-    target_col: str,
+    target_col: str = TARGET_COL,
     test_size: float = 0.2,
-    val_size: float = 0.1,
     random_state: int = 42,
 ) -> tuple:
-    """Divide en train / validation / test respetando la proporción indicada."""
+    """
+    Divide en train / test con stratify sobre el target para preservar
+    la proporción de supervivientes (~38 %) en ambos conjuntos.
+    """
     X = df.drop(columns=[target_col])
     y = df[target_col]
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=test_size, random_state=random_state
+        X, y, test_size=test_size, random_state=random_state, stratify=y
     )
-    X_train, X_val, y_train, y_val = train_test_split(
-        X_train, y_train, test_size=val_size / (1 - test_size), random_state=random_state
-    )
+    logger.info("Split — train: %s, test: %s", len(X_train), len(X_test))
+    return X_train, X_test, y_train, y_test
+
+
+def save_processed(
+    X_train: pd.DataFrame,
+    X_test: pd.DataFrame,
+    y_train: pd.Series,
+    y_test: pd.Series,
+    out_dir: str = PROCESSED_DIR,
+) -> None:
+    """
+    Guarda los cuatro conjuntos como parquet en data/processed/.
+    Archivos: X_train, X_test, y_train, y_test.
+    """
+    os.makedirs(out_dir, exist_ok=True)
+    X_train.to_parquet(f"{out_dir}/X_train.parquet", index=False)
+    X_test.to_parquet(f"{out_dir}/X_test.parquet", index=False)
+    y_train.to_frame().to_parquet(f"{out_dir}/y_train.parquet", index=False)
+    y_test.to_frame().to_parquet(f"{out_dir}/y_test.parquet", index=False)
     logger.info(
-        "Split: train=%s, val=%s, test=%s", len(X_train), len(X_val), len(X_test)
+        "Procesados guardados en %s — X_train %s, X_test %s",
+        out_dir, X_train.shape, X_test.shape,
     )
-    return X_train, X_val, X_test, y_train, y_val, y_test
-
-
-def save_processed(df: pd.DataFrame, output_path: str) -> None:
-    """Guarda el dataset procesado en data/processed/."""
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    df.to_parquet(output_path, index=False)
-    logger.info("Datos procesados guardados en %s", output_path)
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    # TODO: conectar con la salida real de ingestion
-    df = pd.DataFrame(
-        {
-            "feature_1": [1.0, 2.0, None, 4.0],
-            "feature_2": ["a", "b", "a", "b"],
-            "target": [0, 1, 0, 1],
-        }
-    )
-    df = clean(df)
-    df = encode_categoricals(df, cat_cols=["feature_2"])
-    save_processed(df, "data/processed/sample_processed.parquet")
+    df = load_raw()
+    df = clean_titanic(df)
+    df = encode_titanic(df)
+    X_train, X_test, y_train, y_test = split(df)
+    save_processed(X_train, X_test, y_train, y_test)
