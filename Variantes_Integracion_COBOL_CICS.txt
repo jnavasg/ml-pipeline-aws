@@ -1,0 +1,279 @@
+=====================================================================
+ MODERNIZACION DE PROGRAMAS COBOL-CICS LEGADOS
+ Dos variantes para exponer un programa COBOL-CICS de 30 anios
+ a una app movil o portal web moderno
+=====================================================================
+Fecha: 2026-10-08
+
+---------------------------------------------------------------------
+0) EL PROGRAMA COBOL-CICS ORIGINAL (no se toca en ninguna variante)
+---------------------------------------------------------------------
+
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. CONSCLI.
+
+       ENVIRONMENT DIVISION.
+
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01  WS-RESP               PIC S9(8) COMP.
+       01  WS-REG-CLIENTE.
+           05 WS-NOMBRE          PIC X(30).
+           05 WS-SALDO           PIC 9(9)V99.
+
+       LINKAGE SECTION.
+       01  DFHCOMMAREA.
+           05 LK-NUM-CLIENTE     PIC 9(10).
+           05 LK-NOMBRE          PIC X(30).
+           05 LK-SALDO           PIC 9(9)V99.
+           05 LK-STATUS          PIC X(02).
+
+       PROCEDURE DIVISION.
+
+           EXEC CICS READ
+                DATASET('CLIENTES')
+                INTO(WS-REG-CLIENTE)
+                RIDFLD(LK-NUM-CLIENTE)
+                RESP(WS-RESP)
+           END-EXEC.
+
+           IF WS-RESP = DFHRESP(NORMAL)
+               MOVE WS-NOMBRE TO LK-NOMBRE
+               MOVE WS-SALDO  TO LK-SALDO
+               MOVE '00'      TO LK-STATUS
+           ELSE
+               MOVE SPACES    TO LK-NOMBRE
+               MOVE ZEROS     TO LK-SALDO
+               MOVE '99'      TO LK-STATUS
+           END-IF.
+
+           EXEC CICS RETURN
+           END-EXEC.
+
+Punto clave: el programa solo sabe "recibo un COMMAREA, devuelvo un
+COMMAREA". No le importa si del otro lado hay una pantalla 3270, un
+z/OS Connect, o un pipeline SOAP. Esa separacion es lo que permite
+las dos variantes de abajo SIN modificar una sola linea de COBOL.
+
+
+=====================================================================
+VARIANTE A: z/OS CONNECT EE  (estilo REST / JSON)
+=====================================================================
+
+Flujo:
+  App movil --HTTPS/JSON--> z/OS Connect EE --EXEC CICS LINK--> CONSCLI
+
+A.1) Definicion de la API REST (OpenAPI/Swagger, archivo api.yaml)
+---------------------------------------------------------------------
+openapi: 3.0.0
+info:
+  title: API Consulta Cliente
+  version: 1.0.0
+paths:
+  /clientes/{numeroCliente}:
+    get:
+      summary: Consulta datos de un cliente
+      operationId: consultaCliente
+      parameters:
+        - name: numeroCliente
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Datos del cliente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  nombre:
+                    type: string
+                  saldo:
+                    type: number
+                  status:
+                    type: string
+
+A.2) Mapeo interfaz REST <-> COMMAREA (service archive, resumen)
+---------------------------------------------------------------------
+Esto lo genera el z/OS Connect EE Toolkit importando el copybook del
+COMMAREA (DFHCOMMAREA de CONSCLI). El resultado es un archivo de
+mapeo que indica, campo por campo, donde cae cada dato dentro de
+los bytes del COMMAREA:
+
+{
+  "service": "consultaClienteService",
+  "program": "CONSCLI",
+  "commarea": {
+    "requestFields": [
+      { "jsonField": "numeroCliente", "cobolField": "LK-NUM-CLIENTE", "offset": 0, "length": 10, "type": "PIC 9(10)" }
+    ],
+    "responseFields": [
+      { "jsonField": "nombre", "cobolField": "LK-NOMBRE",  "offset": 10, "length": 30, "type": "PIC X(30)" },
+      { "jsonField": "saldo",  "cobolField": "LK-SALDO",   "offset": 40, "length": 11, "type": "PIC 9(9)V99" },
+      { "jsonField": "status", "cobolField": "LK-STATUS",  "offset": 51, "length": 2,  "type": "PIC X(02)" }
+    ]
+  }
+}
+
+A.3) Ejemplo real de llamada desde la app movil
+---------------------------------------------------------------------
+Request (la app movil hace esto, no sabe que hay COBOL detras):
+
+  GET https://banco.com/api/clientes/0001234567
+  Headers: Authorization: Bearer <token>
+
+Response (JSON que recibe la app):
+
+  {
+    "nombre": "JUAN PEREZ GOMEZ",
+    "saldo": 15340.50,
+    "status": "00"
+  }
+
+Lo que pasa internamente en z/OS Connect EE:
+  1. Recibe el GET, extrae "0001234567" del path.
+  2. Convierte ese valor a PIC 9(10) y lo coloca en el offset 0 del
+     COMMAREA binario.
+  3. Ejecuta EXEC CICS LINK PROGRAM('CONSCLI') COMMAREA(area)
+     LENGTH(53).
+  4. Cuando CONSCLI hace EXEC CICS RETURN, toma el COMMAREA de
+     salida y lo convierte de vuelta a JSON segun el mapeo de A.2.
+
+
+=====================================================================
+VARIANTE B: CICS WEB SERVICES  (estilo SOAP / WSDL)
+=====================================================================
+
+Flujo:
+  Portal web --SOAP/XML--> PIPELINE CICS --EXEC CICS LINK--> CONSCLI
+
+B.1) Generacion del WSDL a partir del COBOL (herramienta DFHLS2WS)
+---------------------------------------------------------------------
+IBM provee el utilitario DFHLS2WS ("Language Structure to Web
+Service"), que toma el copybook del COMMAREA y genera automaticamente:
+  - El WSDL (contrato del servicio)
+  - El XSD (esquema de los datos)
+  - Un copybook auxiliar para el mapeo XML <-> COMMAREA
+
+WSDL resultante (resumido):
+
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions name="ConsultaClienteService"
+  targetNamespace="http://banco.com/cics/consclicliente"
+  xmlns="http://schemas.xmlsoap.org/wsdl/">
+
+  <types>
+    <xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+      <xsd:element name="ConsultaClienteRequest">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="numeroCliente" type="xsd:string"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+      <xsd:element name="ConsultaClienteResponse">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="nombre" type="xsd:string"/>
+            <xsd:element name="saldo"  type="xsd:decimal"/>
+            <xsd:element name="status" type="xsd:string"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+    </xsd:schema>
+  </types>
+
+  <message name="ConsultaClienteInput">
+    <part name="parameters" element="ConsultaClienteRequest"/>
+  </message>
+  <message name="ConsultaClienteOutput">
+    <part name="parameters" element="ConsultaClienteResponse"/>
+  </message>
+
+  <portType name="ConsultaClientePortType">
+    <operation name="ConsultaCliente">
+      <input  message="ConsultaClienteInput"/>
+      <output message="ConsultaClienteOutput"/>
+    </operation>
+  </portType>
+
+  <binding name="ConsultaClienteBinding" type="ConsultaClientePortType">
+    <soap:binding style="document"
+      transport="http://schemas.xmlsoap.org/soap/http"/>
+    <operation name="ConsultaCliente">
+      <soap:operation soapAction=""/>
+      <input><soap:body use="literal"/></input>
+      <output><soap:body use="literal"/></output>
+    </operation>
+  </binding>
+</definitions>
+
+B.2) Recursos CICS que arman el pipeline
+---------------------------------------------------------------------
+  - PIPELINE: define la cadena de procesamiento SOAP (handlers que
+    parsean XML, validan, etc.)
+  - WEBSERVICE: enlaza el WSDL generado con el PROGRAM CONSCLI y con
+    el copybook de mapeo que genero DFHLS2WS.
+  - URIMAP: define la URL publica del servicio, por ejemplo:
+      https://banco.com/cics/ConsultaClienteService
+
+B.3) Ejemplo real de llamada desde el portal web
+---------------------------------------------------------------------
+Request SOAP (el portal web envia esto):
+
+  POST /cics/ConsultaClienteService HTTP/1.1
+  Content-Type: text/xml; charset=utf-8
+
+  <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+    <soapenv:Body>
+      <ConsultaClienteRequest>
+        <numeroCliente>0001234567</numeroCliente>
+      </ConsultaClienteRequest>
+    </soapenv:Body>
+  </soapenv:Envelope>
+
+Response SOAP (lo que devuelve el servicio):
+
+  <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+    <soapenv:Body>
+      <ConsultaClienteResponse>
+        <nombre>JUAN PEREZ GOMEZ</nombre>
+        <saldo>15340.50</saldo>
+        <status>00</status>
+      </ConsultaClienteResponse>
+    </soapenv:Body>
+  </soapenv:Envelope>
+
+Lo que pasa internamente en el PIPELINE CICS:
+  1. Recibe el XML, lo valida contra el XSD del WSDL.
+  2. El handler SOAP convierte los campos XML a la estructura del
+     COMMAREA (o a containers de un canal, si el copybook es grande
+     o tiene estructuras repetitivas que no caben en COMMAREA).
+  3. Ejecuta EXEC CICS LINK PROGRAM('CONSCLI') COMMAREA(area)
+     (o CHANNEL(canal) si se uso el modelo de containers).
+  4. Convierte la respuesta de vuelta a XML segun el WSDL.
+
+
+=====================================================================
+COMPARACION RAPIDA
+=====================================================================
+
+                    | z/OS Connect EE (REST/JSON)  | CICS Web Services (SOAP/XML)
+--------------------|-------------------------------|-------------------------------
+Protocolo           | HTTP + JSON                   | HTTP(S) + XML/SOAP
+Contrato            | OpenAPI/Swagger (.yaml)       | WSDL + XSD
+Herramienta de gen. | z/OS Connect EE Toolkit       | DFHLS2WS / DFHWS2LS
+Consumidor tipico   | Apps moviles, SPA, microserv. | Integraciones B2B, sistemas
+                    |                               | legados que ya hablan SOAP
+Peso del mensaje    | Liviano                       | Mas pesado (overhead XML)
+Tendencia actual    | Es el estandar moderno para   | Cada vez mas en desuso, pero
+                    | nuevos desarrollos            | sigue vivo en bancos y seguros
+Programa COBOL      | Igual, sin cambios            | Igual, sin cambios
+                    | (solo cambia el "traductor" de entrada/salida)
+
+En ambos casos la regla de oro es la misma: el COBOL-CICS de 30 anios
+NUNCA se toca. Solo se le agrega una capa de traduccion (z/OS Connect
+o pipeline SOAP) que convierte el formato moderno (JSON/XML) al
+formato binario que el programa siempre entendio (el COMMAREA).
