@@ -1,0 +1,149 @@
+=====================================================================
+ PUENTE AL COMMAREA
+ Flujo completo: de la app/portal al COBOL-CICS legado, y de vuelta
+=====================================================================
+Fecha: 2026-10-08
+Cuarto documento de la serie, complementa a:
+  1) Vacantes_COBOL_AS400.txt
+  2) Variantes_Integracion_COBOL_CICS.txt
+  3) Guia_Despliegue_COBOL_CICS.txt
+
+Version interactiva (diagrama + simbolos por paso):
+  https://claude.ai/artifact/Eyq37V7Ti9grhaQGUGVBoR
+
+---------------------------------------------------------------------
+LEYENDA DE CARRILES (lanes)
+---------------------------------------------------------------------
+[APP]    App movil / Portal web      -- el consumidor, no sabe de COBOL
+[PUENTE] Capa de traduccion          -- z/OS Connect EE o Pipeline CICS
+[COBOL]  Programa COBOL-CICS + VSAM  -- el legado de 30 anios, sin tocar
+
+=====================================================================
+DIAGRAMA DE SECUENCIA -- VARIANTE A (REST / z/OS Connect EE)
+=====================================================================
+
+Usuario        App movil        z/OS Connect EE      CONSCLI (CICS)      VSAM CLIENTES
+   |                |                    |                   |                  |
+   |--Toca "saldo"->|                    |                   |                  |
+   |                |--GET /clientes/---->                   |                  |
+   |                |   0001234567       |                   |                  |
+   |                |                    |--convierte-->      |                  |
+   |                |                    |  JSON a COMMAREA   |                  |
+   |                |                    |--EXEC CICS LINK--->|                  |
+   |                |                    |  PROGRAM(CONSCLI)  |                  |
+   |                |                    |                    |--EXEC CICS READ->|
+   |                |                    |                    |<--registro-------|
+   |                |                    |<--EXEC CICS RETURN-|                  |
+   |                |                    |  (COMMAREA salida) |                  |
+   |                |                    |--convierte-->      |                  |
+   |                |                    |  COMMAREA a JSON   |                  |
+   |                |<--200 OK { nombre,-|                    |                  |
+   |                |   saldo, status }  |                    |                  |
+   |<--muestra------|                    |                    |                  |
+   |   saldo        |                    |                    |                  |
+
+=====================================================================
+DIAGRAMA DE SECUENCIA -- VARIANTE B (SOAP / CICS Web Services)
+=====================================================================
+
+Usuario        Portal web       Pipeline CICS (SOAP)   CONSCLI (CICS)      VSAM CLIENTES
+   |                |                    |                   |                  |
+   |--Solicita------>                    |                   |                  |
+   |   consulta     |                    |                   |                  |
+   |                |--POST ConsultaCli->|                   |                  |
+   |                |  enteService (XML) |                   |                  |
+   |                |                    |--valida XSD,-->   |                  |
+   |                |                    |  arma COMMAREA     |                  |
+   |                |                    |--EXEC CICS LINK--->|                  |
+   |                |                    |  PROGRAM(CONSCLI)  |                  |
+   |                |                    |                    |--EXEC CICS READ->|
+   |                |                    |                    |<--registro-------|
+   |                |                    |<--EXEC CICS RETURN-|                  |
+   |                |                    |  (COMMAREA salida) |                  |
+   |                |                    |--convierte a-->    |                  |
+   |                |                    |  XML/SOAP          |                  |
+   |                |<--SOAP Response----|                    |                  |
+   |<--muestra-------                    |                    |                  |
+   |   saldo        |                    |                    |                  |
+
+=====================================================================
+LINEA DE TIEMPO DETALLADA -- VARIANTE A (REST / z/OS Connect EE)
+=====================================================================
+
+1) [APP] El usuario pide el saldo
+   Toca "Consultar saldo" en la app. Ya tiene el numero de cliente
+   guardado en la sesion.
+
+2) [APP] Se arma la peticion REST
+   GET /clientes/0001234567
+   La app no sabe que hay COBOL detras -- para ella es un endpoint
+   HTTP normal.
+
+3) [PUENTE - z/OS Connect EE] Llega al traductor
+   z/OS Connect EE recibe el GET y arma el COMMAREA binario a partir
+   del mapeo campo-a-campo del copybook.
+
+4) [PUENTE] Se invoca el programa
+   EXEC CICS LINK PROGRAM('CONSCLI') COMMAREA(area)
+   Identico a lo que haria una pantalla 3270 hace 30 anios.
+
+5) [COBOL-CICS] CONSCLI hace su trabajo
+   EXEC CICS READ contra el VSAM CLIENTES, arma la respuesta y hace
+   EXEC CICS RETURN. Fin de su responsabilidad.
+
+6) [PUENTE] Se traduce la salida
+   El COMMAREA de salida se convierte a JSON segun el mismo mapeo
+   (offset -> campo).
+
+7) [APP] La respuesta viaja de vuelta
+   { "nombre": "JUAN PEREZ GOMEZ", "saldo": 15340.50, "status": "00" }
+
+8) [APP] Se muestra el resultado
+   La app pinta "Saldo: $15,340.50". El usuario nunca se entera del
+   programa de 1996 que hizo el trabajo real.
+
+=====================================================================
+LINEA DE TIEMPO DETALLADA -- VARIANTE B (SOAP / CICS Web Services)
+=====================================================================
+
+1) [APP] El usuario pide la consulta
+   Desde el portal web, solicita los datos del cliente.
+
+2) [APP] Se arma la peticion SOAP
+   POST ConsultaClienteService con el XML en el cuerpo. El portal
+   solo habla SOAP, no sabe de CICS.
+
+3) [PUENTE - Pipeline CICS] Llega al pipeline SOAP
+   Valida el XML contra el XSD del WSDL (generado con DFHLS2WS) y
+   arma el COMMAREA.
+
+4) [PUENTE] Se invoca el programa
+   EXEC CICS LINK PROGRAM('CONSCLI') COMMAREA(area)
+   El mismo LINK que en la variante REST.
+
+5) [COBOL-CICS] CONSCLI hace su trabajo
+   EXEC CICS READ contra el VSAM CLIENTES, arma la respuesta y hace
+   EXEC CICS RETURN. El programa es exactamente el mismo que en la
+   variante A.
+
+6) [PUENTE] Se traduce la salida
+   El COMMAREA de salida se envuelve en el XML de respuesta,
+   validado contra el mismo XSD.
+
+7) [APP] La respuesta viaja de vuelta
+   <ConsultaClienteResponse>
+     <nombre>JUAN PEREZ GOMEZ</nombre>
+     <saldo>15340.50</saldo>
+     <status>00</status>
+   </ConsultaClienteResponse>
+
+8) [APP] Se muestra el resultado
+   El portal parsea el XML y pinta el saldo en pantalla.
+
+=====================================================================
+IDEA CLAVE PARA UNA ENTREVISTA
+=====================================================================
+
+"El canal de entrada cambia (3270 -> REST -> SOAP), el programa
+COBOL no. Eso es modernizacion por API-izacion: se envuelve el
+legado, no se reescribe."
