@@ -1,0 +1,147 @@
+=====================================================================
+ GUIA TECNICA: COMO COMPILAR, INSTALAR Y PROBAR EL EJEMPLO COMPLETO
+ (Programa CONSCLI + Variante z/OS Connect EE + Variante CICS Web Services)
+=====================================================================
+Fecha: 2026-10-08
+
+Este documento es el tercero de la serie, complementa a:
+  1) Vacantes_COBOL_AS400.txt
+  2) Variantes_Integracion_COBOL_CICS.txt
+
+---------------------------------------------------------------------
+1) COMPILAR EL PROGRAMA COBOL-CICS
+---------------------------------------------------------------------
+
+JCL tipico de compilacion + link-edit (procedimiento estandar de
+traduccion CICS + COBOL):
+
+//COMPCICS JOB (CUENTA),'COMPILA CONSCLI',CLASS=A,MSGCLASS=X,
+//         NOTIFY=&SYSUID
+//STEP1    EXEC DFHEITVL                     <- Traductor CICS + Compilador COBOL
+//TRN.SYSIN   DD DSN=USR.COBOL.FUENTE(CONSCLI),DISP=SHR
+//LKED.SYSLMOD DD DSN=USR.CICS.LOADLIB(CONSCLI),DISP=SHR
+
+(El nombre exacto del procedimiento varia por instalacion -- en muchos
+shops es DFHEITVL, en otros un procedimiento propio tipo COBCICS. Lo
+importante es que pasa por dos fases: el traductor CICS (convierte
+EXEC CICS en llamadas al EXEC Interface) y despues el compilador
+COBOL normal.)
+
+---------------------------------------------------------------------
+2) DEFINIR EL PROGRAMA EN CICS (RDO/CSD)
+---------------------------------------------------------------------
+
+CEDA DEFINE PROGRAM(CONSCLI) GROUP(GRPBANCO) LANGUAGE(COBOL)
+CEDA INSTALL PROGRAM(CONSCLI) GROUP(GRPBANCO)
+
+---------------------------------------------------------------------
+3) CREAR Y DEFINIR EL ARCHIVO VSAM CLIENTES
+---------------------------------------------------------------------
+
+//DEFVSAM  JOB (CUENTA),'DEFINE CLIENTES',CLASS=A
+//STEP1    EXEC PGM=IDCAMS
+//SYSPRINT DD SYSOUT=*
+//SYSIN    DD *
+  DEFINE CLUSTER (NAME(USR.CICS.CLIENTES)       -
+         INDEXED KEYS(10 0)                      -
+         RECORDSIZE(43 43)                        -
+         )
+/*
+
+Y en CICS:
+CEDA DEFINE FILE(CLIENTES) GROUP(GRPBANCO) DSNAME(USR.CICS.CLIENTES)
+CEDA INSTALL FILE(CLIENTES) GROUP(GRPBANCO)
+
+---------------------------------------------------------------------
+4) PRUEBA MANUAL RAPIDA (antes de meter las APIs)
+---------------------------------------------------------------------
+
+Lo mas simple: usar CECI (CICS Execute Command Interpreter) desde una
+sesion 3270 para simular la llamada sin escribir nada mas:
+
+CECI LINK PROGRAM('CONSCLI') COMMAREA('0001234567') LENGTH(53)
+
+Esto deja ver el COMMAREA de salida byte a byte, sin depender de
+z/OS Connect ni del pipeline SOAP -- es la forma mas rapida de
+confirmar que el programa y el VSAM estan bien instalados.
+
+=====================================================================
+5) VARIANTE A -- DESPLEGAR CON z/OS CONNECT EE
+=====================================================================
+
+1. Abrir el z/OS Connect EE Toolkit (plugin de Eclipse/IBM Explorer
+   for z/OS).
+
+2. Importar el copybook del COMMAREA:
+   File > Import > z/OS Connect EE > CICS Program Interface
+   apuntando al copybook de DFHCOMMAREA. El toolkit genera
+   automaticamente un Service project con el mapeo campo-a-campo.
+
+3. Crear un API project (OpenAPI) y definir la operacion REST
+   (GET /clientes/{numeroCliente}), enlazandola al Service del
+   paso 2.
+
+4. Build -> esto genera dos artefactos:
+   - .sar (Service Archive) -- el mapeo COMMAREA <-> JSON
+   - .aar (API Archive) -- la definicion REST
+
+5. Desplegar al servidor z/OS Connect EE:
+   - Copiando los archivos al directorio apps/ del servidor Liberty
+     donde corre z/OS Connect, o
+   - Via la consola de administracion (zosconnect admin API /
+     consola web).
+
+6. Activar la API (algunos servidores requieren start explicito del
+   API via la consola o el endpoint admin /zosConnect/apis/{apiName}).
+
+7. Probar:
+
+   curl -X GET "https://host:9443/api/clientes/0001234567" \
+        -H "Authorization: Bearer <token>" \
+        -H "Accept: application/json"
+
+=====================================================================
+6) VARIANTE B -- DESPLEGAR CON CICS WEB SERVICES
+=====================================================================
+
+1. Ejecutar el job batch DFHLS2WS pasando el copybook como entrada.
+   Genera:
+   - El .wsdl
+   - El .xsd
+   - Un copybook auxiliar de mapeo (.wsbind)
+
+//GENWS    JOB (CUENTA),'GENERA WSDL',CLASS=A
+//STEP1    EXEC PGM=DFHLS2WS,PARM='...'
+//COBCOPY  DD DSN=USR.COBOL.COPYLIB(CONSCOMM),DISP=SHR
+//WSDLOUT  DD DSN=USR.WSDL.OUTPUT(CONSCLI),DISP=SHR
+//WSBIND   DD DSN=USR.WSBIND.OUTPUT(CONSCLI),DISP=SHR
+
+2. Definir los recursos CICS (via CEDA o grupo de recursos):
+
+CEDA DEFINE PIPELINE(CONSPIPE) GROUP(GRPBANCO) CONFIGFILE(USR.PIPELINE.CONFIG)
+CEDA DEFINE WEBSERVICE(CONSCLIWS) GROUP(GRPBANCO) PIPELINE(CONSPIPE) WSBIND(USR.WSBIND.OUTPUT(CONSCLI))
+CEDA DEFINE URIMAP(CONSCLIURI) GROUP(GRPBANCO) PATH(/cics/ConsultaClienteService) HOST(banco.com) TCPIPSERVICE(HTTPSRV)
+CEDA INSTALL GROUP(GRPBANCO)
+
+3. Probar con curl o SoapUI, mandando el XML/SOAP correspondiente:
+
+   curl -X POST "https://banco.com/cics/ConsultaClienteService" \
+        -H "Content-Type: text/xml; charset=utf-8" \
+        --data-binary @request.xml
+
+=====================================================================
+7) CHECKLIST DE TROUBLESHOOTING RAPIDO
+=====================================================================
+
+Sintoma                          | Causa probable
+----------------------------------|-------------------------------------
+ASRA (abend) al invocar           | COMMAREA length incorrecta -- revisar
+                                   | LENGTH() en el LINK
+PGMIDERR                          | Programa no instalado en el grupo
+                                   | correcto, o no esta en la PPT
+z/OS Connect devuelve 500         | Mapeo offset/longitud mal armado en
+                                   | el .sar
+SOAP Fault 'Client'               | XML no valida contra el XSD --
+                                   | revisar namespace del request
+FILENOTFOUND en el READ           | El FILE(CLIENTES) no esta instalado
+                                   | o el DSNAME no coincide
